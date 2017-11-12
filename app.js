@@ -1,48 +1,50 @@
+'use strict';
 
-// MODULES
+// IMPORT MODULES
 const express = require('express');
 const volleyball = require('volleyball');
 const nunjucks = require('nunjucks');
 const bodyParser = require('body-parser');
+const fs = require('fs');
+const path = require('path');
+const mime = require('mime');
 const db = require('./models');
-const routes = require('./routes');
+const router = require('./routes');
+const socketio = require('socket.io');
 
 
-// APP
+// INSTANTIATE NEW EXPRESS APP
 const app = express();
 
 
-// PORT
-app.set('port', process.env.PORT || 8016);
+// TEMPLATING BOILERPLATE SETUP
+app.set('view engine', 'html'); // have res.render work with html files
+app.engine('html', nunjucks.render); // when giving html files to res.render, tell it to use nunjucks
+nunjucks.configure('views', {noCache: true}); // point nunjucks to the proper directory for templates, caching turned off
 
 
-// VOLLEYBALL
+// LOGGING MIDDLEWARE
 app.use(volleyball);
 
 
-// NUNJUCKS
-app.set('view engine', 'html'); // have res.render work with html files
-app.engine('html', nunjucks.render); // when giving html files to res.render, tell it to use nunjucks
-nunjucks.configure('views',{noCache: true}); // point nunjucks to the proper directory for templates
+// BODY PARSING MIDDLEWARE
+app.use(bodyParser.urlencoded({ extended: true })); // for HTML form submits
+app.use(bodyParser.json()); // would be for AJAX requests
 
 
-// BODYPARSER
-// parse application/x-www-form-urlencoded
-app.use(bodyParser.urlencoded({ extended: false }));
-// parse application/json
-app.use(bodyParser.json());
+// SET PORT
+app.set('port', process.env.PORT || 3000);
 
 
-// SYNC DB -> START SERVER
+// SYNC DB -> START SERVER + ROUTING
 db.sync({force: true})
-.then(function(){
-    app.listen(app.get('port'), function() {
-      console.log(`Engaged! App started on http://localhost:${app.get('port')}! press Ctrl-C to disengage`);
-    });
-  })
-  .catch(console.error);
+.then(startServerAndRouting)
+.catch(console.error);
 
-
-// ROUTE REQUESTS
-app.use('/', routes);
-
+function startServerAndRouting(){
+  const server = app.listen(app.get('port'),
+    console.log(`Listening on port ${app.get('port')}.`));
+  const io = socketio.listen(server);
+  app.use(express.static(path.join(__dirname, '/public'))); // STATIC
+  app.use('/', router(io)); // MODULAR WITH SOCKETS
+}
